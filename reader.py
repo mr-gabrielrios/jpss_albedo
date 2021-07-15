@@ -32,12 +32,12 @@ def file_grab(dirpath, lat, lon):
 
     # For each file in the list, filter by identifying if given coordinate is in the array
     for file in sorted(file_list):
-        ds = netCDF4.Dataset(file)
+        ds = xr.open_dataset(file)
         check = coord_idx(ds, lat, lon)
         # If location in Dataset, collect Dataset
         if check:
             print(file)
-            ds_list.append(netCDF4.Dataset(file))
+            ds_list.append(xr.open_dataset(file))
 
     return ds_list
 
@@ -51,8 +51,8 @@ def coord_idx(dataset, lat, lon):
     lon = np.around(lon, n)
     
     # Round latitude and longitude arrays to 'n' decimal places to allow for an approximate match
-    lats = np.around(dataset['Latitude'][:].data, n)
-    lons = np.around(dataset['Longitude'][:].data, n)
+    lats = np.around(dataset['Latitude'].data, n)
+    lons = np.around(dataset['Longitude'].data, n)
     # Get index of matching latitude
     lat_idx = np.where(lats == lat)
     # Check to see if matches exist. If not, return False. Else, check longitudes.
@@ -94,8 +94,8 @@ def quick_test(ncdata, target_lat, target_lon, date):
     lon = ncdata['Longitude'][:].data
     # Product of raw EDR albedo data and prescribed scale factor
     # Remove all values greater than 1 and bring to scale
-    alb = np.where(ncdata['VIIRS_Albedo_EDR'][:].data >= 1/ncdata['AlbScl'][:].min(), 
-                   np.nan, ncdata['VIIRS_Albedo_EDR'][:].data)*ncdata['AlbScl'][:].mean()
+    alb = np.where(ncdata['VIIRS_Albedo_EDR'].data >= 1/ncdata['AlbScl'].min().values, 
+                   np.nan, ncdata['VIIRS_Albedo_EDR'].data)*ncdata['AlbScl'].mean().values
     # Filter by spatial extent box
     bound_box = [target_lon-0.5, target_lon+0.5, target_lat-0.5, target_lat+0.5]
     fig, ax = plt.subplots(dpi=144, subplot_kw={'projection': ccrs.PlateCarree()})
