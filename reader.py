@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NOAA-CESSRST NERTO Albedo Climatology Study
-Developed by: Gabriel Rios
+NOAA-CESSRST NERTO Albedo Study
+Script:         VIIRS Reader
+Objective:      Read and process VIIRS data for a given coordinate.
+Developed by:   Gabriel Rios
 """
 
 import cartopy.crs as ccrs
@@ -75,13 +77,6 @@ def grid_gen(ds, target_lat, target_lon, box_size, step):
     
     grid_lons = np.arange(target_lon-box_size, target_lon+box_size, step)
     grid_lats = np.arange(target_lat-box_size, target_lat+box_size, step) 
-    
-    # lat = cf.DimensionCoordinate(data=cf.Data(grid_lats, 'degreesN'))
-    # lon = cf.DimensionCoordinate(data=cf.Data(grid_lons, 'degreesE'))
-    
-    grid_data = ds.regrids({'latitude': lat, 'longitude': lon}, method='linear')
-    
-    return grid_data
  
 def quick_test(ncdata, target_lat, target_lon, date):
     '''
@@ -96,10 +91,12 @@ def quick_test(ncdata, target_lat, target_lon, date):
     # Remove all values greater than 1 and bring to scale
     alb = np.where(ncdata['VIIRS_Albedo_EDR'].data >= 1/ncdata['AlbScl'].min().values, 
                    np.nan, ncdata['VIIRS_Albedo_EDR'].data)*ncdata['AlbScl'].mean().values
+    pqi = ncdata['ProductQualityInformation'].data 
+    
     # Filter by spatial extent box
     bound_box = [target_lon-0.5, target_lon+0.5, target_lat-0.5, target_lat+0.5]
     fig, ax = plt.subplots(dpi=144, subplot_kw={'projection': ccrs.PlateCarree()})
-    im = ax.pcolormesh(lon, lat, alb, cmap='viridis', vmin=0, vmax=0.3)
+    im = ax.pcolormesh(lon, lat, alb, cmap='viridis', vmin=0, vmax=0.30)
     colorbar = fig.colorbar(im, ax=ax)
     colorbar.set_label('Surface albedo', rotation=270, labelpad=15)
     ax.set_extent(bound_box)
@@ -114,13 +111,11 @@ def main(dirpath, lat, lon, box_size):
     # Run through all location-filtered Datasets to ensure location check works properly
     for ds in ds_list:
         lat, lon = quick_test(ds, 40.7128, -74.0060, ds.time_coverage_start)
-    
-    # data = grid_gen(ds_list[0], lat, lon, box_size, 0.5)
-
+        
 if __name__ == '__main__':
     ''' User inputs. '''
     # Define directory containing all surface albedo data
-    dirpath = os.path.join(os.getcwd(), 'data', 'surfalb')
+    dirpath = os.path.join(os.getcwd(), 'data', 'viirs')
     # Coordinate of interest (latitude, longitude)
     target_lat, target_lon = [40.7128, -74.0060]
     # Bound box size (in degrees)
