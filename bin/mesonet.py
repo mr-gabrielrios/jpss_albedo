@@ -9,7 +9,9 @@ Developed by:   Gabriel Rios
 # BEGIN IMPORTS
 ##############################################################################################
 
-import datetime, numpy as np, os, pandas as pd
+import datetime, numpy as np, os, pandas as pd, pytz
+from pysolar.solar import *
+from tzwhere import tzwhere
 
 ##############################################################################################
 # END IMPORTS
@@ -90,12 +92,54 @@ def csv_reader(date_range, data_dir):
     data['R_UP'] = data['SW_OUT'].astype(float) + data['LW_OUT'].astype(float)
     # Match parameter names to model parameter names
     data = data.drop(columns=['ALB', 'SW_IN', 'SW_OUT', 'LW_IN', 'LW_OUT'])
+    # Make dates ~aware~
+    data['datetime'] = [pytz.utc.localize(data.loc[idx, 'datetime']).to_pydatetime() for idx in range(len(data))]
+    # Set datetime to index
+    data = data.set_index('datetime')
     
     return data
     
+
+def processor(data, locn, intv = '1D', param='SURFALB'):
+    '''
+    Processes albedo data for validation with VIIRS Land Surface Albedo data.
+    Data processed per VIIRS Surface Albedo ATBD:
+        https://www.star.nesdis.noaa.gov/jpss/documents/ATBD/ATBD_EPS_Land_SurfaceAlbedo_v1.3.pdf
+    '''
+    
+    # Assign coordinates for each Mesonet station (deg N, deg E)
+    if locn == 'BKLN':
+        lat, lon = [40.3605, -73.9521]
+    elif locn == 'QUEE':
+        lat, lon = [40.7366, -73.8201]
+    elif locn == 'STAT':
+        lat, lon = [40.6021, -74.1504]
+    
+    # Calculate solar zenith angle (rough estimate)
+    data['SZA'] = [90 - get_altitude_fast(lat, lon, data.index.to_list()[idx]) for idx in range(len(data))]
+    # Filter data based on solar zenith angle, per manufacturer suggestion
+    #   Sec.: 1.1.6.4
+    #   Link: https://www.kippzonen.com/Download/354/Manual-CNR-4-Net-Radiometer-English-V2104.pdf
+    data.loc[data['SZA'] >= 80, 'SURFALB'] = 0
+    
+    # Set any negative or zero values to nan to preserve statistics
+    data.loc[data['SURFALB'] <= 0, 'SURFALB'] = np.nan
+    # # Generate empty DataFrame to calculate temporal statistics
+    stats = pd.DataFrame()
+    # Get mean over time interval
+    stats['mean'] = data.resample(intv).mean()['SURFALB']
+    # Get standard deviation over time interval
+    stats['std'] = data.resample(intv).std()['SURFALB']
+    # Get count
+    stats['N'] = data.resample(intv).count()['SURFALB']
+    
+    return stats
+
+
 if __name__ == "__main__":
-    date_range = [datetime.datetime(year=2019, month=7, day=28, hour=5),
-                  datetime.datetime(year=2019, month=7, day=29, hour=5)-datetime.timedelta(hours=1)]
+    date_range = [datetime.datetime(year=2019, month=6, day=1, hour=0),
+                  datetime.datetime(year=2019, month=10, day=1, hour=0)-datetime.timedelta(hours=1)]
     date_range = pd.date_range(start=date_range[0], end=date_range[1], freq='H') 
-    data_dir = os.path.join(os.path.dirname(__file__), 'data/vdtn/BKLN/')
+    data_dir = os.path.join(os.getcwd(), 'data/vdtn/BKLN/')
     data = csv_reader(date_range, data_dir)
+    stats = processor(data, 'BKLN')
