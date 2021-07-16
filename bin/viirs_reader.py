@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 NOAA-CESSRST NERTO Albedo Study
 Script:         VIIRS Reader
@@ -101,7 +99,6 @@ def quick_test(ncdata, target_lat, target_lon, date):
     colorbar.set_label('Surface albedo', rotation=270, labelpad=15)
     ax.set_extent(bound_box)
     ax.set_title('VIIRS LSA @ {0}'.format(date))
-    
     
     return lat, lon
 

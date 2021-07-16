@@ -1,3 +1,9 @@
+"""
+NOAA-CESSRST NERTO Albedo Study
+Script:         Mesonet Reader
+Objective:      Read and process Mesonet data for a given coordinate.
+Developed by:   Gabriel Rios
+"""
 
 ##############################################################################################
 # BEGIN IMPORTS
