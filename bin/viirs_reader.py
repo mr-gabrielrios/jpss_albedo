@@ -9,6 +9,7 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import netCDF4
 import numpy as np
+import numpy.ma as ma
 import os
 import xarray as xr
 import warnings
@@ -75,8 +76,9 @@ def grid_gen(ds, target_lat, target_lon, box_size, step):
     
     grid_lons = np.arange(target_lon-box_size, target_lon+box_size, step)
     grid_lats = np.arange(target_lat-box_size, target_lat+box_size, step) 
- 
-def quick_test(ncdata, target_lat, target_lon, date):
+
+
+def quick_test(ncdata, target_lat, target_lon, date, plot=False):
     '''
     Prints a plot of the data on hand as a quick visualization of the working data.
     '''
@@ -89,26 +91,40 @@ def quick_test(ncdata, target_lat, target_lon, date):
     # Remove all values greater than 1 and bring to scale
     alb = np.where(ncdata['VIIRS_Albedo_EDR'].data >= 1/ncdata['AlbScl'].min().values, 
                    np.nan, ncdata['VIIRS_Albedo_EDR'].data)*ncdata['AlbScl'].mean().values
-    pqi = ncdata['ProductQualityInformation'].data 
+    
+    # Masking scheme - set all data outside of established spatial extent (bound_box) 
+    # to np.nan
+    bound_box = [target_lon-0.5, target_lon+0.5, target_lat-0.5, target_lat+0.5]
+    geomask = np.where((lon > bound_box[0]) & 
+                        (lon < bound_box[1]) & 
+                        (lat > bound_box[2]) & 
+                        (lat < bound_box[3]), True, False)
+    lon = np.where(geomask, lon, np.nan)
+    lat = np.where(geomask, lat, np.nan)
+    alb = np.where(geomask, alb, np.nan)
     
     # Filter by spatial extent box
-    bound_box = [target_lon-0.5, target_lon+0.5, target_lat-0.5, target_lat+0.5]
-    fig, ax = plt.subplots(dpi=144, subplot_kw={'projection': ccrs.PlateCarree()})
-    im = ax.pcolormesh(lon, lat, alb, cmap='viridis', vmin=0, vmax=0.30)
-    colorbar = fig.colorbar(im, ax=ax)
-    colorbar.set_label('Surface albedo', rotation=270, labelpad=15)
-    ax.set_extent(bound_box)
-    ax.set_title('VIIRS LSA @ {0}'.format(date))
+    if plot:
+        fig, ax = plt.subplots(dpi=144, subplot_kw={'projection': ccrs.PlateCarree()})
+        im = ax.pcolor(lon, lat, alb, cmap='viridis', vmin=0, vmax=0.30)
+        colorbar = fig.colorbar(im, ax=ax)
+        colorbar.set_label('Surface albedo', rotation=270, labelpad=15)
+        ax.set_extent(bound_box)
+        ax.set_title('VIIRS LSA @ {0}'.format(date))
     
-    return lat, lon
+    return lat, lon, alb
 
 def main(dirpath, lat, lon, box_size):
-    # Return file list
-    ds_list = file_grab(dirpath, lat, lon)
+    # Return file list if variable not in memory
+    if not 'ds_list' in globals():
+        ds_list = file_grab(dirpath, lat, lon)
     # Run through all location-filtered Datasets to ensure location check works properly
-    for ds in ds_list:
-        lat, lon = quick_test(ds, 40.7128, -74.0060, ds.time_coverage_start)
-        
+    # for ds in ds_list[0:3]:
+    #     lat, lon, alb = quick_test(ds, 40.7128, -74.0060, ds.time_coverage_start, plot=True)
+    
+    # Return list to save processing time
+    return ds_list
+    
 if __name__ == '__main__':
     ''' User inputs. '''
     # Define directory containing all surface albedo data
@@ -118,4 +134,4 @@ if __name__ == '__main__':
     # Bound box size (in degrees)
     box_size = 2
     
-    main(dirpath, target_lat, target_lon, box_size)
+    ds_list = main(dirpath, target_lat, target_lon, box_size)

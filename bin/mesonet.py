@@ -87,9 +87,9 @@ def csv_reader(date_range, data_dir):
             data = pd.concat([data.iloc[:i], nanrow, data.iloc[i:]]).reset_index(drop=True)
         
     # Re-cast numerical strings as floats
-    data['SURFALB'] = data['ALB'].astype(float)
-    data['R_DOWN'] = data['SW_IN'].astype(float) + data['LW_IN'].astype(float)
-    data['R_UP'] = data['SW_OUT'].astype(float) + data['LW_OUT'].astype(float)
+    data['surfalb'] = data['ALB'].astype(float)
+    data['r_down'] = data['SW_IN'].astype(float) + data['LW_IN'].astype(float)
+    data['r_up'] = data['SW_OUT'].astype(float) + data['LW_OUT'].astype(float)
     # Match parameter names to model parameter names
     data = data.drop(columns=['ALB', 'SW_IN', 'SW_OUT', 'LW_IN', 'LW_OUT'])
     # Make dates ~aware~
@@ -100,7 +100,7 @@ def csv_reader(date_range, data_dir):
     return data
     
 
-def processor(data, locn, intv = '1D', param='SURFALB'):
+def processor(data, loc, intv='1D', param='surfalb'):
     '''
     Processes albedo data for validation with VIIRS Land Surface Albedo data.
     Data processed per VIIRS Surface Albedo ATBD:
@@ -108,38 +108,49 @@ def processor(data, locn, intv = '1D', param='SURFALB'):
     '''
     
     # Assign coordinates for each Mesonet station (deg N, deg E)
-    if locn == 'BKLN':
+    if loc == 'BKLN':
         lat, lon = [40.3605, -73.9521]
-    elif locn == 'QUEE':
+    elif loc == 'QUEE':
         lat, lon = [40.7366, -73.8201]
-    elif locn == 'STAT':
+    elif loc == 'STAT':
         lat, lon = [40.6021, -74.1504]
     
+    # Append coordinates and station name as columns to DataFrame
+    data['lat'] = lat
+    data['lon'] = lon
+    data['loc'] = loc
+    
     # Calculate solar zenith angle (rough estimate)
-    data['SZA'] = [90 - get_altitude_fast(lat, lon, data.index.to_list()[idx]) for idx in range(len(data))]
+    data['sza'] = [90 - get_altitude_fast(lat, lon, data.index.to_list()[idx]) for idx in range(len(data))]
     # Filter data based on solar zenith angle, per manufacturer suggestion
     #   Sec.: 1.1.6.4
     #   Link: https://www.kippzonen.com/Download/354/Manual-CNR-4-Net-Radiometer-English-V2104.pdf
-    data.loc[data['SZA'] >= 80, 'SURFALB'] = 0
+    data.loc[data['sza'] >= 80, param] = 0
     
     # Set any negative or zero values to nan to preserve statistics
-    data.loc[data['SURFALB'] <= 0, 'SURFALB'] = np.nan
+    data.loc[data[param] <= 0, param] = np.nan
     # # Generate empty DataFrame to calculate temporal statistics
     stats = pd.DataFrame()
     # Get mean over time interval
-    stats['mean'] = data.resample(intv).mean()['SURFALB']
+    stats['mean'] = data.resample(intv).mean()[param]
     # Get standard deviation over time interval
-    stats['std'] = data.resample(intv).std()['SURFALB']
+    stats['std'] = data.resample(intv).std()[param]
     # Get count
-    stats['N'] = data.resample(intv).count()['SURFALB']
+    stats['N'] = data.resample(intv).count()[param]
     
-    return stats
+    return data, stats
 
+def main(date_range, loc):
+    date_range = pd.date_range(start=date_range[0], end=date_range[1], freq='H') 
+    data_dir = os.path.join(os.getcwd(), 'data/vdtn/{0}/'.format(loc))
+    data = csv_reader(date_range, data_dir)
+    data, stats = processor(data, loc)
+    
+    return data
 
 if __name__ == "__main__":
     date_range = [datetime.datetime(year=2019, month=6, day=1, hour=0),
-                  datetime.datetime(year=2019, month=10, day=1, hour=0)-datetime.timedelta(hours=1)]
+                  datetime.datetime(year=2019, month=9, day=1, hour=0)-datetime.timedelta(hours=1)]
     date_range = pd.date_range(start=date_range[0], end=date_range[1], freq='H') 
     data_dir = os.path.join(os.getcwd(), 'data/vdtn/BKLN/')
-    data = csv_reader(date_range, data_dir)
-    stats = processor(data, 'BKLN')
+    data = main()
